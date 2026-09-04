@@ -1,0 +1,5 @@
+node_modules/
+stockroom-accounts.json
+stockroom-data.json
+.env
+.vercel/
