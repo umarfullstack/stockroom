@@ -1,4 +1,4 @@
-import { supabaseAdmin, requireUser } from './_supabase.js';
+import { supabaseAdmin, requireUser, ROLES } from './_supabase.js';
 import { sendTelegramMessage, lowStockItems, formatLowStockMessage } from './_telegram.js';
 
 export default async function handler(request, response) {
@@ -18,7 +18,14 @@ export default async function handler(request, response) {
       return response.status(400).json({ ok: false, error: 'Invalid state' });
     }
     const { data: existing } = await supabaseAdmin.from('stockroom_state').select('data').eq('company_id', companyId).single();
-    const wasLow = new Set(lowStockItems(existing?.data?.products).map(product => product.id));
+    const existingProducts = existing?.data?.products || [];
+    const wasLow = new Set(lowStockItems(existingProducts).map(product => product.id));
+
+    if (user.user_metadata?.role !== ROLES.ADMIN) {
+      const newIds = new Set(request.body.products.map(product => product.id));
+      const removedProduct = existingProducts.some(product => !newIds.has(product.id));
+      if (removedProduct) return response.status(403).json({ ok: false, error: 'Оператор не может удалять товары' });
+    }
 
     const { error } = await supabaseAdmin.from('stockroom_state').update({ data: request.body, updated_at: new Date().toISOString() }).eq('company_id', companyId);
     if (error) return response.status(500).json({ ok: false, error: 'Не удалось сохранить состояние' });
