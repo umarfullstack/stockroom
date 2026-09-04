@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "seed": "node scripts/seed-accounts.mjs"
+    "seed": "node scripts/seed-accounts.mjs",
+    "create-company": "node scripts/create-company.mjs"
   },
   "devDependencies": {
     "vite": "^7.1.7",

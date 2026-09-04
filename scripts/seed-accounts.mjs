@@ -1,18 +1,22 @@
 import 'dotenv/config';
-import { supabaseAdmin as supabase } from '../api/_supabase.js';
+import { createCompany } from './_provision.mjs';
+import { supabaseAdmin } from '../api/_supabase.js';
 
-const seedAccounts = [
-  { name: 'Анна Петрова', email: 'admin@stockroom.local', password: 'admin2025', role: 'Администратор' },
-  { name: 'Сотрудник склада', email: 'worker@stockroom.local', password: 'stockroom2025', role: 'Оператор' }
-];
+const companyId = 'demo';
+const companyName = 'Demo компания';
 
-for (const account of seedAccounts) {
-  const { error } = await supabase.auth.admin.createUser({
-    email: account.email,
-    password: account.password,
-    email_confirm: true,
-    user_metadata: { name: account.name, role: account.role }
-  });
-  if (error) console.error(`✗ ${account.email}: ${error.message}`);
-  else console.log(`✓ ${account.email} создан (${account.role})`);
+try {
+  await createCompany({ id: companyId, name: companyName, adminName: 'Анна Петрова', adminEmail: 'admin@stockroom.local', adminPassword: 'admin2025' });
+  console.log('✓ admin@stockroom.local создан (Администратор)');
+} catch (error) {
+  console.error(`✗ admin@stockroom.local: ${error.message}`);
 }
+
+const { error } = await supabaseAdmin.auth.admin.createUser({
+  email: 'worker@stockroom.local',
+  password: 'stockroom2025',
+  email_confirm: true,
+  user_metadata: { name: 'Сотрудник склада', role: 'Оператор', company_id: companyId, company_name: companyName }
+});
+if (error) console.error(`✗ worker@stockroom.local: ${error.message}`);
+else console.log('✓ worker@stockroom.local создан (Оператор)');

@@ -12,7 +12,14 @@ export const supabaseAnon = createClient(url, publicKey, clientOptions);
 export const ROLES = { ADMIN: 'Администратор', OPERATOR: 'Оператор' };
 
 export function toAccount(user) {
-  return { id: user.id, name: user.user_metadata?.name || user.email, email: user.email, role: user.user_metadata?.role || ROLES.OPERATOR };
+  return {
+    id: user.id,
+    name: user.user_metadata?.name || user.email,
+    email: user.email,
+    role: user.user_metadata?.role || ROLES.OPERATOR,
+    companyId: user.user_metadata?.company_id,
+    companyName: user.user_metadata?.company_name
+  };
 }
 
 export async function requireUser(request) {

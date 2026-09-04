@@ -128,7 +128,7 @@ async function renderAccounts() {
   document.querySelector('#add-account').onclick = () => openAccountModal();
   document.querySelectorAll('[data-account-delete]').forEach(button => button.onclick = async () => { if (button.disabled) return; if (!confirm('Удалить этот аккаунт?')) return; try { const response = await fetch(`${apiBase}/api/accounts`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ id: button.dataset.accountDelete }) }); const result = await parseResponse(response); if (!response.ok) return toast(result.error || 'Не удалось удалить аккаунт'); await renderAccounts(); toast('Аккаунт удалён'); } catch { toast('Сервер недоступен'); } });
 }
-function renderAll() { renderOverview(); renderProducts(); renderMovements(); renderReports(); renderAccounts(); bindViewEvents(); document.querySelectorAll('.admin-only').forEach(item => item.hidden = role !== 'Администратор'); const profile = document.querySelector('.user-pill span:last-child'); if (profile && currentUser) profile.innerHTML = `${currentUser.name}<br><small>${currentUser.role.toLowerCase()}</small>`; const topUser = document.querySelector('#top-user'); if (topUser && currentUser) topUser.innerHTML = `<span class="top-user-name">${currentUser.name}</span><span class="top-user-role">${currentUser.role}</span>`; translatePage(); document.querySelector('#overview-view .eyebrow').textContent = new Intl.DateTimeFormat(locale(), { dateStyle: 'full' }).format(new Date()); document.querySelectorAll('#overview-view .stat-value')[1].textContent = formatMoney(284650); }
+function renderAll() { renderOverview(); renderProducts(); renderMovements(); renderReports(); renderAccounts(); bindViewEvents(); document.querySelectorAll('.admin-only').forEach(item => item.hidden = role !== 'Администратор'); const profile = document.querySelector('.user-pill span:last-child'); if (profile && currentUser) profile.innerHTML = `${currentUser.name}<br><small>${currentUser.role.toLowerCase()}${currentUser.companyName ? ' · ' + currentUser.companyName : ''}</small>`; const topUser = document.querySelector('#top-user'); if (topUser && currentUser) topUser.innerHTML = `<span class="top-user-name">${currentUser.name}</span><span class="top-user-role">${currentUser.role}</span>`; translatePage(); document.querySelector('#overview-view .eyebrow').textContent = new Intl.DateTimeFormat(locale(), { dateStyle: 'full' }).format(new Date()); document.querySelectorAll('#overview-view .stat-value')[1].textContent = formatMoney(284650); }
 function openAccountModal() {
   const backdrop = document.querySelector('#modal-backdrop');
   const form = document.querySelector('#modal-form');
@@ -215,25 +215,37 @@ document.querySelector('#login-form').addEventListener('submit', async event => 
     role = currentUser.role;
     sessionStorage.setItem('stockroom-auth', JSON.stringify(currentUser));
     document.querySelector('#auth-gate').classList.add('hidden');
+    await loadState();
     renderAll();
     toast('Добро пожаловать в Stockroom');
   } catch (loginError) { error.textContent = loginError.message || 'Не удалось выполнить вход'; }
 });
-document.querySelector('#logout').onclick = () => { sessionStorage.removeItem('stockroom-auth'); document.querySelector('#auth-gate').classList.remove('hidden'); };
+document.querySelector('#logout').onclick = () => {
+  sessionStorage.removeItem('stockroom-auth');
+  currentUser = null;
+  role = 'Оператор';
+  products = [];
+  movements = [];
+  document.querySelector('#auth-gate').classList.remove('hidden');
+};
 if (sessionStorage.getItem('stockroom-auth')) document.querySelector('#auth-gate').classList.add('hidden');
 
-async function boot() {
+async function loadState() {
   try {
-    const response = await fetch(`${apiBase}/api/state`);
+    const response = await fetch(`${apiBase}/api/state`, { headers: authHeaders() });
     if (!response.ok) throw new Error('Backend unavailable');
     const state = await parseResponse(response);
-    if (state.products.length) products = state.products;
-    if (state.movements.length) movements = state.movements;
+    if (state.products?.length) products = state.products;
+    if (state.movements?.length) movements = state.movements;
     movements = movements.map(m => ({ ...m, dateKey: m.dateKey || (m.date.startsWith('Вчера') ? '2025-05-13' : '2025-05-14') }));
   } catch {
     products = JSON.parse(localStorage.getItem('stockroom-products')) || seedProducts;
     movements = JSON.parse(localStorage.getItem('stockroom-movements')) || seedMovements;
   }
+}
+
+async function boot() {
+  if (currentUser?.access_token) await loadState();
   renderAll();
 }
 
