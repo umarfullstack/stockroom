@@ -41,6 +41,7 @@ const currency = () => language === 'uz' ? 'UZS' : 'RUB';
 const formatMoney = amount => new Intl.NumberFormat(locale(), { style: 'currency', currency: currency(), maximumFractionDigits: 0 }).format(amount);
 const formatDateTime = date => new Intl.DateTimeFormat(locale(), { dateStyle: 'short', timeStyle: 'medium' }).format(date);
 const parseResponse = async response => { const raw = await response.text(); try { return raw ? JSON.parse(raw) : {}; } catch { return { ok: false, error: 'Сервер вернул некорректный ответ' }; } };
+const authHeaders = () => currentUser?.access_token ? { Authorization: `Bearer ${currentUser.access_token}` } : {};
 const translatePage = () => {
   const dictionary = language === 'uz' ? translations : Object.fromEntries(Object.entries(translations).map(([from, to]) => [to, from]));
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -97,7 +98,7 @@ app.innerHTML = `
 
 const save = async () => {
   try {
-    await fetch(`${apiBase}/api/state`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ products, movements }) });
+    await fetch(`${apiBase}/api/state`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ products, movements }) });
   } catch {
     localStorage.setItem('stockroom-products', JSON.stringify(products));
     localStorage.setItem('stockroom-movements', JSON.stringify(movements));
@@ -122,10 +123,10 @@ async function renderAccounts() {
   const view = document.querySelector('#accounts-view');
   if (role !== 'Администратор') { view.innerHTML = '<div class="empty">Раздел доступен только администратору</div>'; return; }
   let accounts = [];
-  try { accounts = await fetch(`${apiBase}/api/accounts`).then(parseResponse); } catch { accounts = []; }
+  try { accounts = await fetch(`${apiBase}/api/accounts`, { headers: authHeaders() }).then(parseResponse); } catch { accounts = []; }
   view.innerHTML = `<div class="page-head"><div><div class="eyebrow">Доступ к системе</div><h1>Сотрудники</h1><p class="subtitle">Управление аккаунтами команды</p></div><button class="primary" id="add-account">＋ Новый аккаунт</button></div><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Аккаунты</h2><p class="panel-caption">Пароли не отображаются после создания</p></div></div><div class="account-list">${accounts.map(account => `<div class="account-row"><span class="avatar">${account.name.split(' ').map(word => word[0]).slice(0, 2).join('')}</span><div><strong>${account.name}</strong><small>${account.email}</small></div><span class="badge ${account.role === 'Администратор' ? 'in' : 'ok'}">${account.role}</span><button class="small-btn account-delete" data-account-delete="${account.id}" ${account.id === currentUser?.id ? 'disabled title="Нельзя удалить свой аккаунт"' : ''}>Удалить</button></div>`).join('')}</div></section>`;
   document.querySelector('#add-account').onclick = () => openAccountModal();
-  document.querySelectorAll('[data-account-delete]').forEach(button => button.onclick = async () => { if (button.disabled) return; if (!confirm('Удалить этот аккаунт?')) return; try { const response = await fetch(`${apiBase}/api/accounts`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: Number(button.dataset.accountDelete), currentId: currentUser?.id }) }); const result = await parseResponse(response); if (!response.ok) return toast(result.error || 'Не удалось удалить аккаунт'); await renderAccounts(); toast('Аккаунт удалён'); } catch { toast('Сервер недоступен'); } });
+  document.querySelectorAll('[data-account-delete]').forEach(button => button.onclick = async () => { if (button.disabled) return; if (!confirm('Удалить этот аккаунт?')) return; try { const response = await fetch(`${apiBase}/api/accounts`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ id: button.dataset.accountDelete }) }); const result = await parseResponse(response); if (!response.ok) return toast(result.error || 'Не удалось удалить аккаунт'); await renderAccounts(); toast('Аккаунт удалён'); } catch { toast('Сервер недоступен'); } });
 }
 function renderAll() { renderOverview(); renderProducts(); renderMovements(); renderReports(); renderAccounts(); bindViewEvents(); document.querySelectorAll('.admin-only').forEach(item => item.hidden = role !== 'Администратор'); const profile = document.querySelector('.user-pill span:last-child'); if (profile && currentUser) profile.innerHTML = `${currentUser.name}<br><small>${currentUser.role.toLowerCase()}</small>`; const topUser = document.querySelector('#top-user'); if (topUser && currentUser) topUser.innerHTML = `<span class="top-user-name">${currentUser.name}</span><span class="top-user-role">${currentUser.role}</span>`; translatePage(); document.querySelector('#overview-view .eyebrow').textContent = new Intl.DateTimeFormat(locale(), { dateStyle: 'full' }).format(new Date()); document.querySelectorAll('#overview-view .stat-value')[1].textContent = formatMoney(284650); }
 function openAccountModal() {
@@ -136,7 +137,7 @@ function openAccountModal() {
   form.innerHTML = `<div class="field"><label>Имя сотрудника</label><input name="name" placeholder="Имя Фамилия" required /></div><div class="field"><label>Рабочий email</label><input name="email" type="email" placeholder="name@company.ru" required /></div><div class="field"><label>Пароль</label><div class="password-wrap"><input id="new-account-password" name="password" type="password" minlength="6" required /><button class="password-toggle" type="button" data-password-target="new-account-password" aria-label="Показать пароль" title="Показать пароль">◉</button></div></div><div class="field"><label>Роль</label><select name="role"><option>Оператор</option><option>Администратор</option></select></div><div class="modal-actions"><button type="button" class="ghost" id="cancel-modal">Отмена</button><button class="primary">Создать аккаунт</button></div>`;
   backdrop.classList.add('open');
   form.querySelector('.password-toggle').onclick = event => togglePassword(event.currentTarget);
-  form.onsubmit = async event => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); try { const response = await fetch(`${apiBase}/api/accounts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); const result = await parseResponse(response); if (!response.ok) return toast(result.error || 'Не удалось создать аккаунт'); backdrop.classList.remove('open'); await renderAccounts(); toast('Аккаунт добавлен в базу'); } catch { toast('Сервер недоступен'); } };
+  form.onsubmit = async event => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); try { const response = await fetch(`${apiBase}/api/accounts`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(data) }); const result = await parseResponse(response); if (!response.ok) return toast(result.error || 'Не удалось создать аккаунт'); backdrop.classList.remove('open'); await renderAccounts(); toast('Аккаунт добавлен в базу'); } catch { toast('Сервер недоступен'); } };
   document.querySelector('#cancel-modal').onclick = () => backdrop.classList.remove('open');
 }
 function openModal(kind, productId = null) {
@@ -210,7 +211,7 @@ document.querySelector('#login-form').addEventListener('submit', async event => 
     let result;
     try { result = raw ? JSON.parse(raw) : {}; } catch { throw new Error('Сервер вернул некорректный ответ'); }
     if (!response.ok) throw new Error(result.error);
-    currentUser = result.user;
+    currentUser = { ...result.user, access_token: result.access_token };
     role = currentUser.role;
     sessionStorage.setItem('stockroom-auth', JSON.stringify(currentUser));
     document.querySelector('#auth-gate').classList.add('hidden');

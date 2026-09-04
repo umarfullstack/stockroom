@@ -1,23 +1,39 @@
-import { accounts } from './_accounts.js';
+import { supabaseAdmin, requireAdmin, toAccount, ROLES } from './_supabase.js';
 
-export default function handler(request, response) {
-  if (request.method === 'GET') return response.status(200).json(accounts.map(({ password, ...account }) => account));
+export default async function handler(request, response) {
+  const admin = await requireAdmin(request);
+  if (!admin) return response.status(401).json({ ok: false, error: 'Требуется вход администратора' });
+
+  if (request.method === 'GET') {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers();
+    if (error) return response.status(500).json({ ok: false, error: 'Не удалось загрузить аккаунты' });
+    return response.status(200).json(data.users.map(toAccount));
+  }
+
   if (request.method === 'POST') {
     const { name, email, password, role } = request.body || {};
     if (!name || !email || !password || !role) return response.status(400).json({ ok: false, error: 'Заполните все поля' });
-    if (accounts.some(account => account.email === email)) return response.status(400).json({ ok: false, error: 'Такой email уже зарегистрирован' });
-    accounts.push({ id: Date.now(), name, email, password, role });
+    const { error } = await supabaseAdmin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { name, role } });
+    if (error) return response.status(400).json({ ok: false, error: error.message === 'User already registered' ? 'Такой email уже зарегистрирован' : error.message });
     return response.status(201).json({ ok: true });
   }
+
   if (request.method === 'DELETE') {
-    const id = Number(request.body?.id);
-    const currentId = Number(request.body?.currentId);
-    const account = accounts.find(item => item.id === id);
+    const id = request.body?.id;
+    if (!id) return response.status(400).json({ ok: false, error: 'Аккаунт не найден' });
+    if (id === admin.id) return response.status(400).json({ ok: false, error: 'Нельзя удалить свой аккаунт' });
+    const { data, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    if (listError) return response.status(500).json({ ok: false, error: 'Не удалось загрузить аккаунты' });
+    const account = data.users.find(user => user.id === id);
     if (!account) return response.status(400).json({ ok: false, error: 'Аккаунт не найден' });
-    if (account.id === currentId) return response.status(400).json({ ok: false, error: 'Нельзя удалить свой аккаунт' });
-    if (account.role === 'Администратор' && accounts.filter(item => item.role === 'Администратор').length === 1) return response.status(400).json({ ok: false, error: 'Нельзя удалить последнего администратора' });
-    accounts.splice(accounts.indexOf(account), 1);
+    if (account.user_metadata?.role === ROLES.ADMIN && data.users.filter(user => user.user_metadata?.role === ROLES.ADMIN).length === 1) {
+      return response.status(400).json({ ok: false, error: 'Нельзя удалить последнего администратора' });
+    }
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
+    if (error) return response.status(500).json({ ok: false, error: 'Не удалось удалить аккаунт' });
     return response.status(200).json({ ok: true });
   }
+
+  response.setHeader('Allow', 'GET, POST, DELETE');
   return response.status(405).json({ ok: false, error: 'Method not allowed' });
 }

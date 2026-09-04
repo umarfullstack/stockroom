@@ -1,23 +1,23 @@
-let state = {
-  products: [
-    { id: 1, name: 'Кофе Колумбия', sku: 'COF-001', category: 'Напитки', stock: 124, min: 40, unit: 'упак.', icon: '☕' },
-    { id: 2, name: 'Молоко 3.2%', sku: 'MLK-032', category: 'Молочные продукты', stock: 68, min: 30, unit: 'шт.', icon: '🥛' },
-    { id: 3, name: 'Сахар-песок', sku: 'SUG-001', category: 'Бакалея', stock: 21, min: 25, unit: 'кг', icon: '◇' },
-    { id: 4, name: 'Стакан бумажный 250 мл', sku: 'CUP-250', category: 'Расходники', stock: 850, min: 300, unit: 'шт.', icon: '▱' },
-    { id: 5, name: 'Чай Earl Grey', sku: 'TEA-004', category: 'Напитки', stock: 42, min: 20, unit: 'упак.', icon: '♨' }
-  ],
-  movements: []
-};
+import { supabaseAdmin, requireUser } from './_supabase.js';
 
-export default function handler(request, response) {
-  if (request.method === 'GET') return response.status(200).json(state);
+export default async function handler(request, response) {
+  if (request.method === 'GET') {
+    const { data, error } = await supabaseAdmin.from('stockroom_state').select('data').eq('id', 'main').single();
+    if (error) return response.status(500).json({ ok: false, error: 'Не удалось загрузить состояние' });
+    return response.status(200).json(data.data);
+  }
+
   if (request.method === 'PUT') {
     if (!Array.isArray(request.body?.products) || !Array.isArray(request.body?.movements)) {
       return response.status(400).json({ ok: false, error: 'Invalid state' });
     }
-    state = request.body;
+    const user = await requireUser(request);
+    if (!user) return response.status(401).json({ ok: false, error: 'Требуется вход' });
+    const { error } = await supabaseAdmin.from('stockroom_state').update({ data: request.body, updated_at: new Date().toISOString() }).eq('id', 'main');
+    if (error) return response.status(500).json({ ok: false, error: 'Не удалось сохранить состояние' });
     return response.status(200).json({ ok: true });
   }
+
   response.setHeader('Allow', 'GET, PUT');
   return response.status(405).json({ ok: false, error: 'Method not allowed' });
 }
