@@ -1,4 +1,5 @@
 import { supabaseAdmin, requireUser } from './_supabase.js';
+import { sendTelegramMessage, lowStockItems, formatLowStockMessage } from './_telegram.js';
 
 export default async function handler(request, response) {
   const user = await requireUser(request);
@@ -16,8 +17,18 @@ export default async function handler(request, response) {
     if (!Array.isArray(request.body?.products) || !Array.isArray(request.body?.movements)) {
       return response.status(400).json({ ok: false, error: 'Invalid state' });
     }
+    const { data: existing } = await supabaseAdmin.from('stockroom_state').select('data').eq('company_id', companyId).single();
+    const wasLow = new Set(lowStockItems(existing?.data?.products).map(product => product.id));
+
     const { error } = await supabaseAdmin.from('stockroom_state').update({ data: request.body, updated_at: new Date().toISOString() }).eq('company_id', companyId);
     if (error) return response.status(500).json({ ok: false, error: 'Не удалось сохранить состояние' });
+
+    const newlyLow = lowStockItems(request.body.products).filter(product => !wasLow.has(product.id));
+    if (newlyLow.length) {
+      const { data: company } = await supabaseAdmin.from('companies').select('name, telegram_chat_id').eq('id', companyId).single();
+      if (company?.telegram_chat_id) await sendTelegramMessage(company.telegram_chat_id, formatLowStockMessage(company.name, newlyLow));
+    }
+
     return response.status(200).json({ ok: true });
   }
 

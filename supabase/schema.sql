@@ -1,6 +1,8 @@
 create table if not exists companies (
   id text primary key,
   name text not null,
+  telegram_chat_id text,
+  telegram_link_code text unique,
   created_at timestamptz not null default now()
 );
 

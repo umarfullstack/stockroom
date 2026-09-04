@@ -124,9 +124,32 @@ async function renderAccounts() {
   if (role !== 'Администратор') { view.innerHTML = '<div class="empty">Раздел доступен только администратору</div>'; return; }
   let accounts = [];
   try { accounts = await fetch(`${apiBase}/api/accounts`, { headers: authHeaders() }).then(parseResponse); } catch { accounts = []; }
-  view.innerHTML = `<div class="page-head"><div><div class="eyebrow">Доступ к системе</div><h1>Сотрудники</h1><p class="subtitle">Управление аккаунтами команды</p></div><button class="primary" id="add-account">＋ Новый аккаунт</button></div><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Аккаунты</h2><p class="panel-caption">Пароли не отображаются после создания</p></div></div><div class="account-list">${accounts.map(account => `<div class="account-row"><span class="avatar">${account.name.split(' ').map(word => word[0]).slice(0, 2).join('')}</span><div><strong>${account.name}</strong><small>${account.email}</small></div><span class="badge ${account.role === 'Администратор' ? 'in' : 'ok'}">${account.role}</span><button class="small-btn account-delete" data-account-delete="${account.id}" ${account.id === currentUser?.id ? 'disabled title="Нельзя удалить свой аккаунт"' : ''}>Удалить</button></div>`).join('')}</div></section>`;
+  view.innerHTML = `<div class="page-head"><div><div class="eyebrow">Доступ к системе</div><h1>Сотрудники</h1><p class="subtitle">Управление аккаунтами команды</p></div><button class="primary" id="add-account">＋ Новый аккаунт</button></div><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Аккаунты</h2><p class="panel-caption">Пароли не отображаются после создания</p></div></div><div class="account-list">${accounts.map(account => `<div class="account-row"><span class="avatar">${account.name.split(' ').map(word => word[0]).slice(0, 2).join('')}</span><div><strong>${account.name}</strong><small>${account.email}</small></div><span class="badge ${account.role === 'Администратор' ? 'in' : 'ok'}">${account.role}</span><button class="small-btn account-delete" data-account-delete="${account.id}" ${account.id === currentUser?.id ? 'disabled title="Нельзя удалить свой аккаунт"' : ''}>Удалить</button></div>`).join('')}</div></section><section class="panel" id="telegram-panel"><div class="panel-head"><div><h2 class="panel-title">Telegram-уведомления</h2><p class="panel-caption">О низком остатке будет писать бот</p></div></div><div style="padding:20px">Загрузка…</div></section>`;
   document.querySelector('#add-account').onclick = () => openAccountModal();
   document.querySelectorAll('[data-account-delete]').forEach(button => button.onclick = async () => { if (button.disabled) return; if (!confirm('Удалить этот аккаунт?')) return; try { const response = await fetch(`${apiBase}/api/accounts`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ id: button.dataset.accountDelete }) }); const result = await parseResponse(response); if (!response.ok) return toast(result.error || 'Не удалось удалить аккаунт'); await renderAccounts(); toast('Аккаунт удалён'); } catch { toast('Сервер недоступен'); } });
+  renderTelegramPanel();
+}
+
+async function renderTelegramPanel() {
+  const box = document.querySelector('#telegram-panel > div');
+  if (!box) return;
+  try {
+    const status = await fetch(`${apiBase}/api/telegram-link`, { headers: authHeaders() }).then(parseResponse);
+    if (status.linked) {
+      box.innerHTML = `<p>✅ Чат подключён — уведомления о низком остатке приходят в Telegram.</p><button class="ghost" id="telegram-unlink">Отключить</button>`;
+      document.querySelector('#telegram-unlink').onclick = async () => {
+        await fetch(`${apiBase}/api/telegram-link`, { method: 'DELETE', headers: authHeaders() });
+        toast('Telegram отключён');
+        renderTelegramPanel();
+      };
+    } else if (status.deepLink) {
+      box.innerHTML = `<p>Нажмите кнопку и отправьте боту команду <code>/start</code> — привяжется автоматически.</p><a class="primary" href="${status.deepLink}" target="_blank" rel="noopener">Подключить Telegram</a>`;
+    } else {
+      box.innerHTML = `<p>Откройте бота в Telegram и отправьте: <code>/start ${status.code}</code></p>`;
+    }
+  } catch {
+    box.innerHTML = '<p>Не удалось загрузить статус Telegram.</p>';
+  }
 }
 function renderAll() { renderOverview(); renderProducts(); renderMovements(); renderReports(); renderAccounts(); bindViewEvents(); document.querySelectorAll('.admin-only').forEach(item => item.hidden = role !== 'Администратор'); const profile = document.querySelector('.user-pill span:last-child'); if (profile && currentUser) profile.innerHTML = `${currentUser.name}<br><small>${currentUser.role.toLowerCase()}${currentUser.companyName ? ' · ' + currentUser.companyName : ''}</small>`; const topUser = document.querySelector('#top-user'); if (topUser && currentUser) topUser.innerHTML = `<span class="top-user-name">${currentUser.name}</span><span class="top-user-role">${currentUser.role}</span>`; translatePage(); document.querySelector('#overview-view .eyebrow').textContent = new Intl.DateTimeFormat(locale(), { dateStyle: 'full' }).format(new Date()); document.querySelectorAll('#overview-view .stat-value')[1].textContent = formatMoney(284650); }
 function openAccountModal() {

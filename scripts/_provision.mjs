@@ -1,7 +1,9 @@
 import { supabaseAdmin } from '../api/_supabase.js';
+import { randomLinkCode } from '../api/_telegram.js';
 
 export async function createCompany({ id, name, adminName, adminEmail, adminPassword }) {
-  const { error: companyError } = await supabaseAdmin.from('companies').upsert({ id, name });
+  const telegramLinkCode = randomLinkCode();
+  const { error: companyError } = await supabaseAdmin.from('companies').upsert({ id, name, telegram_link_code: telegramLinkCode });
   if (companyError) throw new Error(`companies: ${companyError.message}`);
 
   const { error: stateError } = await supabaseAdmin.from('stockroom_state').upsert({ company_id: id, data: { products: [], movements: [] } });
@@ -14,4 +16,6 @@ export async function createCompany({ id, name, adminName, adminEmail, adminPass
     user_metadata: { name: adminName, role: 'Администратор', company_id: id, company_name: name }
   });
   if (userError) throw new Error(`auth user: ${userError.message}`);
+
+  return { telegramLinkCode };
 }

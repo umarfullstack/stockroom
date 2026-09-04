@@ -18,8 +18,9 @@ if (!id || !name || !adminName || !adminEmail || !adminPassword) {
 }
 
 try {
-  await createCompany({ id, name, adminName, adminEmail, adminPassword });
+  const { telegramLinkCode } = await createCompany({ id, name, adminName, adminEmail, adminPassword });
   console.log(`✓ Компания "${name}" (${id}) создана, админ ${adminEmail} может входить`);
+  console.log(`  Telegram-код привязки: ${telegramLinkCode} (можно подключить в разделе «Сотрудники»)`);
 } catch (error) {
   console.error(`✗ ${error.message}`);
   process.exit(1);
